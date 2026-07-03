@@ -84,6 +84,17 @@ func (ctrl *BookingHandler) AuthMiddleware() gin.HandlerFunc {
 	}
 }
 
+// ListConcerts godoc
+// @Summary List concerts
+// @Description Get a paginated list of concerts with optional case-insensitive search by title or artist
+// @Tags Concerts
+// @Produce json
+// @Param search query string false "Search query (title or artist)"
+// @Param page query int false "Page number (default: 1)"
+// @Param limit query int false "Limit per page (default: 10)"
+// @Success 200 {object} dto.WebResponseWithPaging[[]dto.ConcertResponse]
+// @Failure 500 {object} dto.WebResponse[any]
+// @Router /concerts [get]
 func (ctrl *BookingHandler) ListConcerts(c *gin.Context) {
 	search := c.Query("search")
 
@@ -122,6 +133,19 @@ func (ctrl *BookingHandler) ListConcerts(c *gin.Context) {
 	helper.WritePagingResponse(c, http.StatusOK, "Concerts retrieved successfully", concertResps, pagingInfo)
 }
 
+// CreateConcert godoc
+// @Summary Create a concert
+// @Description Add a new concert with ticket categories. Restricted to admin and staff.
+// @Tags Concerts
+// @Accept json
+// @Produce json
+// @Param request body dto.CreateConcertRequest true "Create concert request"
+// @Security BearerAuth
+// @Success 201 {object} dto.WebResponse[dto.ConcertResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 403 {object} dto.WebResponse[any]
+// @Failure 500 {object} dto.WebResponse[any]
+// @Router /concerts [post]
 func (ctrl *BookingHandler) CreateConcert(c *gin.Context) {
 	var req dto.CreateConcertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -154,6 +178,18 @@ func (ctrl *BookingHandler) CreateConcert(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusCreated, "Concert created successfully", mapConcertResponse(*concert))
 }
 
+// CreateBooking godoc
+// @Summary Create a booking
+// @Description Book tickets for category classes. Requires authentication.
+// @Tags Bookings
+// @Accept json
+// @Produce json
+// @Param request body dto.CreateBookingRequest true "Create booking request"
+// @Security BearerAuth
+// @Success 201 {object} dto.WebResponse[dto.BookingResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 401 {object} dto.WebResponse[any]
+// @Router /bookings [post]
 func (ctrl *BookingHandler) CreateBooking(c *gin.Context) {
 	userIDVal, exists := c.Get("userID")
 	if !exists {
@@ -185,6 +221,17 @@ func (ctrl *BookingHandler) CreateBooking(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusCreated, "Booking created successfully", mapBookingResponse(*booking))
 }
 
+// ConfirmPayment godoc
+// @Summary Confirm payment
+// @Description Mark booking status as confirmed. Restricted to admin and staff.
+// @Tags Bookings
+// @Produce json
+// @Param id path int true "Booking ID"
+// @Security BearerAuth
+// @Success 200 {object} dto.WebResponse[dto.BookingResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 403 {object} dto.WebResponse[any]
+// @Router /bookings/{id}/pay [post]
 func (ctrl *BookingHandler) ConfirmPayment(c *gin.Context) {
 	bookingIDStr := c.Param("id")
 	bookingID, err := strconv.ParseUint(bookingIDStr, 10, 32)
@@ -202,6 +249,13 @@ func (ctrl *BookingHandler) ConfirmPayment(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "Payment confirmed, tickets are successfully issued.", mapBookingResponse(*booking))
 }
 
+// Health godoc
+// @Summary Health check
+// @Description Get service, database, and redis connection status
+// @Tags Health
+// @Produce json
+// @Success 200 {object} dto.WebResponse[any]
+// @Router /health [get]
 func (ctrl *BookingHandler) Health(c *gin.Context) {
 	dbStatus := "connected"
 	if db.DB == nil {
@@ -290,6 +344,18 @@ func mapBookingResponse(booking model.Booking) dto.BookingResponse {
 	}
 }
 
+// GetBooking godoc
+// @Summary Get booking details
+// @Description Retrieve booking order items and total pricing. Standard user can only fetch their own bookings. Admin/staff can fetch any.
+// @Tags Bookings
+// @Produce json
+// @Param id path int true "Booking ID"
+// @Security BearerAuth
+// @Success 200 {object} dto.WebResponse[dto.BookingResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 403 {object} dto.WebResponse[any]
+// @Failure 404 {object} dto.WebResponse[any]
+// @Router /bookings/{id} [get]
 func (ctrl *BookingHandler) GetBooking(c *gin.Context) {
 	bookingIDStr := c.Param("id")
 	bookingID, err := strconv.ParseUint(bookingIDStr, 10, 32)

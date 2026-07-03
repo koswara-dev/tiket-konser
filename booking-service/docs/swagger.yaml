@@ -1,0 +1,379 @@
+basePath: /api/v1
+definitions:
+  dto.BookingItemResponse:
+    properties:
+      id:
+        type: integer
+      quantity:
+        type: integer
+      sub_total:
+        type: number
+      ticket_category:
+        $ref: '#/definitions/dto.TicketCategoryResponse'
+      ticket_category_id:
+        type: integer
+    type: object
+  dto.BookingResponse:
+    properties:
+      booking_date:
+        type: string
+      booking_items:
+        items:
+          $ref: '#/definitions/dto.BookingItemResponse'
+        type: array
+      id:
+        type: integer
+      status:
+        type: string
+      total_amount:
+        type: number
+      user_id:
+        type: integer
+    type: object
+  dto.ConcertResponse:
+    properties:
+      artist:
+        type: string
+      date:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      location:
+        type: string
+      ticket_categories:
+        items:
+          $ref: '#/definitions/dto.TicketCategoryResponse'
+        type: array
+      title:
+        type: string
+    type: object
+  dto.CreateBookingRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/dto.OrderItemInput'
+        type: array
+    required:
+    - items
+    type: object
+  dto.CreateConcertRequest:
+    properties:
+      artist:
+        type: string
+      date:
+        description: Should be RFC3339 format
+        type: string
+      description:
+        type: string
+      location:
+        type: string
+      ticket_categories:
+        items:
+          $ref: '#/definitions/dto.TicketCategoryInput'
+        type: array
+      title:
+        type: string
+    required:
+    - artist
+    - date
+    - location
+    - ticket_categories
+    - title
+    type: object
+  dto.OrderItemInput:
+    properties:
+      quantity:
+        minimum: 1
+        type: integer
+      ticket_category_id:
+        type: integer
+    required:
+    - quantity
+    - ticket_category_id
+    type: object
+  dto.PagingResponse:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total_pages:
+        type: integer
+      total_rows:
+        type: integer
+    type: object
+  dto.TicketCategoryInput:
+    properties:
+      name:
+        type: string
+      price:
+        type: number
+      seats:
+        minimum: 1
+        type: integer
+    required:
+    - name
+    - price
+    - seats
+    type: object
+  dto.TicketCategoryResponse:
+    properties:
+      available_seats:
+        type: integer
+      id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: number
+      total_seats:
+        type: integer
+    type: object
+  dto.WebResponse-any:
+    properties:
+      code:
+        type: integer
+      data: {}
+      errors: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.WebResponse-dto_BookingResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        $ref: '#/definitions/dto.BookingResponse'
+      errors: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.WebResponse-dto_ConcertResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        $ref: '#/definitions/dto.ConcertResponse'
+      errors: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.WebResponseWithPaging-array_dto_ConcertResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/dto.ConcertResponse'
+        type: array
+      message:
+        type: string
+      paging:
+        $ref: '#/definitions/dto.PagingResponse'
+      status:
+        type: string
+    type: object
+host: localhost:8082
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API Server for Concert Ticketing Booking Service
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Booking Service API
+  version: "1.0"
+paths:
+  /bookings:
+    post:
+      consumes:
+      - application/json
+      description: Book tickets for category classes. Requires authentication.
+      parameters:
+      - description: Create booking request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateBookingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.WebResponse-dto_BookingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+      security:
+      - BearerAuth: []
+      summary: Create a booking
+      tags:
+      - Bookings
+  /bookings/{id}:
+    get:
+      description: Retrieve booking order items and total pricing. Standard user can
+        only fetch their own bookings. Admin/staff can fetch any.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.WebResponse-dto_BookingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+      security:
+      - BearerAuth: []
+      summary: Get booking details
+      tags:
+      - Bookings
+  /bookings/{id}/pay:
+    post:
+      description: Mark booking status as confirmed. Restricted to admin and staff.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.WebResponse-dto_BookingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+      security:
+      - BearerAuth: []
+      summary: Confirm payment
+      tags:
+      - Bookings
+  /concerts:
+    get:
+      description: Get a paginated list of concerts with optional case-insensitive
+        search by title or artist
+      parameters:
+      - description: Search query (title or artist)
+        in: query
+        name: search
+        type: string
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Limit per page (default: 10)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.WebResponseWithPaging-array_dto_ConcertResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+      summary: List concerts
+      tags:
+      - Concerts
+    post:
+      consumes:
+      - application/json
+      description: Add a new concert with ticket categories. Restricted to admin and
+        staff.
+      parameters:
+      - description: Create concert request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateConcertRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.WebResponse-dto_ConcertResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+      security:
+      - BearerAuth: []
+      summary: Create a concert
+      tags:
+      - Concerts
+  /health:
+    get:
+      description: Get service, database, and redis connection status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.WebResponse-any'
+      summary: Health check
+      tags:
+      - Health
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer <your_token>" to authenticate.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -106,6 +106,17 @@ func (ctrl *UserHandler) AuthMiddleware() gin.HandlerFunc {
 	}
 }
 
+// Register godoc
+// @Summary Register a new user
+// @Description Register a new user with name, email, password, and optional role
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body dto.RegisterRequest true "Register request"
+// @Success 201 {object} dto.WebResponse[dto.UserResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 500 {object} dto.WebResponse[any]
+// @Router /auth/register [post]
 func (ctrl *UserHandler) Register(c *gin.Context) {
 	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -131,6 +142,16 @@ func (ctrl *UserHandler) Register(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusCreated, "Registration successful. Please check your email for the OTP code.", userResp)
 }
 
+// VerifyOTP godoc
+// @Summary Verify user registration OTP
+// @Description Verify the OTP code sent to user email to activate the account
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body dto.VerifyOTPRequest true "Verify OTP request"
+// @Success 200 {object} dto.WebResponse[any]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Router /auth/verify-otp [post]
 func (ctrl *UserHandler) VerifyOTP(c *gin.Context) {
 	var req dto.VerifyOTPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -147,6 +168,17 @@ func (ctrl *UserHandler) VerifyOTP(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "Account successfully verified and activated.", nil)
 }
 
+// Login godoc
+// @Summary User login
+// @Description Login with email and password to receive a JWT token
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body dto.LoginRequest true "Login request"
+// @Success 200 {object} dto.WebResponse[dto.LoginResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 401 {object} dto.WebResponse[any]
+// @Router /auth/login [post]
 func (ctrl *UserHandler) Login(c *gin.Context) {
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -175,6 +207,16 @@ func (ctrl *UserHandler) Login(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "Login successful", loginResp)
 }
 
+// Logout godoc
+// @Summary User logout
+// @Description Invalidate the current session token (blacklists it in Redis)
+// @Tags Auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} dto.WebResponse[any]
+// @Failure 401 {object} dto.WebResponse[any]
+// @Failure 500 {object} dto.WebResponse[any]
+// @Router /auth/logout [post]
 func (ctrl *UserHandler) Logout(c *gin.Context) {
 	tokenString, _ := c.Get("token")
 	expVal, _ := c.Get("exp")
@@ -191,6 +233,16 @@ func (ctrl *UserHandler) Logout(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "Successfully logged out from current session.", nil)
 }
 
+// ForceLogout godoc
+// @Summary Force logout from all devices
+// @Description Invalidate all active tokens for the user
+// @Tags Auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} dto.WebResponse[any]
+// @Failure 401 {object} dto.WebResponse[any]
+// @Failure 500 {object} dto.WebResponse[any]
+// @Router /auth/force-logout [post]
 func (ctrl *UserHandler) ForceLogout(c *gin.Context) {
 	userIDVal, exists := c.Get("userID")
 	if !exists {
@@ -208,6 +260,18 @@ func (ctrl *UserHandler) ForceLogout(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "Successfully logged out from all devices.", nil)
 }
 
+// GetProfile godoc
+// @Summary Get user profile
+// @Description Fetch user profile details. A standard user can only retrieve their own ID. Admin/staff can retrieve any.
+// @Tags Users
+// @Produce json
+// @Param id path int true "User ID"
+// @Security BearerAuth
+// @Success 200 {object} dto.WebResponse[dto.UserResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 403 {object} dto.WebResponse[any]
+// @Failure 404 {object} dto.WebResponse[any]
+// @Router /users/{id} [get]
 func (ctrl *UserHandler) GetProfile(c *gin.Context) {
 	idStr := c.Param("id")
 	targetID, err := strconv.ParseUint(idStr, 10, 32)
@@ -246,6 +310,21 @@ func (ctrl *UserHandler) GetProfile(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "User profile retrieved successfully", userResp)
 }
 
+// UpdateProfile godoc
+// @Summary Update user profile
+// @Description Update profile details (name, password). Standard user can only update their own. Admin/staff can update any.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Param request body dto.UpdateProfileRequest true "Update profile request"
+// @Security BearerAuth
+// @Success 200 {object} dto.WebResponse[dto.UserResponse]
+// @Failure 400 {object} dto.WebResponse[any]
+// @Failure 403 {object} dto.WebResponse[any]
+// @Failure 404 {object} dto.WebResponse[any]
+// @Failure 500 {object} dto.WebResponse[any]
+// @Router /users/{id} [put]
 func (ctrl *UserHandler) UpdateProfile(c *gin.Context) {
 	idStr := c.Param("id")
 	targetID, err := strconv.ParseUint(idStr, 10, 32)
@@ -309,6 +388,16 @@ func (ctrl *UserHandler) UpdateProfile(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "Profile updated successfully", userResp)
 }
 
+// ListUsers godoc
+// @Summary List all users
+// @Description Retrieve a list of all registered users. Restricted to admin and staff.
+// @Tags Users
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} dto.WebResponse[[]dto.UserResponse]
+// @Failure 403 {object} dto.WebResponse[any]
+// @Failure 500 {object} dto.WebResponse[any]
+// @Router /users [get]
 func (ctrl *UserHandler) ListUsers(c *gin.Context) {
 	users, err := ctrl.svc.ListUsers()
 	if err != nil {
@@ -331,6 +420,13 @@ func (ctrl *UserHandler) ListUsers(c *gin.Context) {
 	helper.WriteSuccessResponse(c, http.StatusOK, "Users retrieved successfully", userResps)
 }
 
+// Health godoc
+// @Summary Health check
+// @Description Get service, database, and redis connection status
+// @Tags Health
+// @Produce json
+// @Success 200 {object} dto.WebResponse[any]
+// @Router /health [get]
 func (ctrl *UserHandler) Health(c *gin.Context) {
 	dbStatus := "connected"
 	if db.DB == nil {

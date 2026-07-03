@@ -3,13 +3,18 @@ package routes
 import (
 	"booking-service/handler"
 	"booking-service/middleware"
+	_ "booking-service/docs"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func SetupRouter(bookingHandler *handler.BookingHandler) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.ErrorHandler())
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	r.GET("/health", bookingHandler.Health)
 

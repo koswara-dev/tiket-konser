@@ -14,6 +14,8 @@ import (
 	"user-service/redis"
 	"user-service/repository"
 
+	"strings"
+
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -33,9 +35,128 @@ func (s *UserService) GenerateOTP() string {
 }
 
 func (s *UserService) SendOTPEmail(email, otp string) error {
-	subject := "Subject: Concert Ticket Registration OTP\r\n"
-	body := fmt.Sprintf("Hi,\r\n\r\nYour registration OTP code is: %s.\r\nIt will expire in 5 minutes.\r\n", otp)
-	msg := []byte(subject + "\r\n" + body)
+	subject := "Subject: Concert Ticket Registration OTP\n"
+	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+
+	spacedOTP := ""
+	for i, r := range otp {
+		if i > 0 {
+			spacedOTP += " "
+		}
+		spacedOTP += string(r)
+	}
+
+	htmlTemplate := `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #f7f9fb;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+</style>
+</head>
+<body style="margin: 0; padding: 40px 0; background-color: #f7f9fb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center">
+        <!-- Main Container -->
+        <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border: 1px solid #e1e8ed; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 20px 30px; border-bottom: 1px solid #e1e8ed;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td>
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Logo_BCA.svg/512px-Logo_BCA.svg.png" alt="BCA" style="height: 30px; display: block;" />
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 40px 40px 30px 40px; text-align: center;">
+              <!-- Lock Icon -->
+              <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="center" style="padding-bottom: 15px;">
+                    <img src="https://cdn-icons-png.flaticon.com/512/1000/1000966.png" alt="Lock" style="width: 48px; height: 48px; display: block;" />
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-bottom: 15px;">
+                    <h2 style="margin: 0; font-size: 22px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.5px;">Kode OTP Anda</h2>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-bottom: 30px;">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #4a5568; max-width: 480px;">
+                      Gunakan kode berikut untuk memverifikasi transaksi Anda. Jangan bagikan kode ini kepada siapapun, termasuk petugas bank.
+                    </p>
+                  </td>
+                </tr>
+                <!-- OTP Box -->
+                <tr>
+                  <td align="center" style="padding-bottom: 30px;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px 20px;">
+                      <tr>
+                        <td align="center" style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; padding-bottom: 12px;">
+                          Kode Rahasia
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="font-size: 32px; font-weight: 700; color: #005691; letter-spacing: 8px; padding-left: 8px;">
+                          {{.OTP}}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <!-- Warning Box -->
+                <tr>
+                  <td align="center" style="padding-bottom: 20px;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px; padding: 16px;">
+                      <tr>
+                        <td valign="top" style="padding-right: 12px; width: 20px;">
+                          <!-- Warning Icon -->
+                          <span style="font-size: 18px; color: #b91c1c; display: block; line-height: 1;">⚠️</span>
+                        </td>
+                        <td align="left" style="font-size: 13px; line-height: 1.5; color: #991b1b;">
+                          <strong style="color: #b91c1c; display: block; margin-bottom: 4px;">Peringatan Keamanan</strong>
+                          Kode ini hanya berlaku selama <strong>5 menit</strong>. Bank BCA tidak pernah meminta kode OTP untuk alasan apapun. Jika Anda tidak meminta kode ini, segera hubungi Halo BCA di 1500888.
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; background-color: #f8fafc; border-top: 1px solid #e1e8ed; text-align: center;">
+              <p style="margin: 0 0 12px 0; font-size: 12px; font-weight: 600; color: #4a5568;">PT Bank Central Asia Tbk.</p>
+              <p style="margin: 0 0 16px 0; font-size: 12px; color: #718096;">
+                <a href="#" style="color: #4a5568; text-decoration: none;">Privacy Policy</a> &nbsp;|&nbsp; 
+                <a href="#" style="color: #4a5568; text-decoration: none;">Contact Us</a> &nbsp;|&nbsp; 
+                <a href="#" style="color: #4a5568; text-decoration: none;">Terms of Service</a>
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #a0aec0;">&copy; 2024 PT Bank Central Asia Tbk. All Rights Reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+
+	htmlBody := strings.ReplaceAll(htmlTemplate, "{{.OTP}}", spacedOTP)
+	msg := []byte(subject + mime + htmlBody)
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.SmtpHost, s.cfg.SmtpPort)
 	auth := smtp.PlainAuth("", s.cfg.SmtpUser, s.cfg.SmtpPassword, s.cfg.SmtpHost)
