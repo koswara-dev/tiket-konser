@@ -11,8 +11,11 @@ import (
 
 type UserRepository interface {
 	FindByEmail(email string) (*model.User, error)
+	FindByID(id uint) (*model.User, error)
+	FindAll() ([]model.User, error)
 	CreateUserWithOTP(user *model.User, otp *model.OTP) error
 	VerifyOTPAndActivateUser(email, code string) error
+	UpdateUser(user *model.User) error
 }
 
 type userRepository struct {
@@ -33,6 +36,27 @@ func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *userRepository) FindByID(id uint) (*model.User, error) {
+	if r.db == nil {
+		return nil, errors.New("database connection is unavailable")
+	}
+	var user model.User
+	err := r.db.First(&user, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) FindAll() ([]model.User, error) {
+	if r.db == nil {
+		return nil, errors.New("database connection is unavailable")
+	}
+	var users []model.User
+	err := r.db.Find(&users).Error
+	return users, err
 }
 
 func (r *userRepository) CreateUserWithOTP(user *model.User, otp *model.OTP) error {
@@ -71,4 +95,11 @@ func (r *userRepository) VerifyOTPAndActivateUser(email, code string) error {
 
 		return tx.Delete(&otp).Error
 	})
+}
+
+func (r *userRepository) UpdateUser(user *model.User) error {
+	if r.db == nil {
+		return errors.New("database connection is unavailable")
+	}
+	return r.db.Save(user).Error
 }

@@ -9,11 +9,14 @@ import (
 
 	"user-service/config"
 	"user-service/db"
+	"user-service/dto"
+	"user-service/helper"
 	"user-service/redis"
 	"user-service/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type UserHandler struct {
@@ -29,14 +32,14 @@ func (ctrl *UserHandler) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
+			helper.WriteErrorResponse(c, http.StatusUnauthorized, "Authorization header required")
 			c.Abort()
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header format must be Bearer <token>"})
+			helper.WriteErrorResponse(c, http.StatusUnauthorized, "Authorization header format must be Bearer <token>")
 			c.Abort()
 			return
 		}
@@ -50,14 +53,14 @@ func (ctrl *UserHandler) AuthMiddleware() gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			helper.WriteErrorResponse(c, http.StatusUnauthorized, "Invalid or expired token")
 			c.Abort()
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+			helper.WriteErrorResponse(c, http.StatusUnauthorized, "Invalid token claims")
 			c.Abort()
 			return
 		}
@@ -71,6 +74,8 @@ func (ctrl *UserHandler) AuthMiddleware() gin.HandlerFunc {
 			parsed, _ := strconv.ParseUint(val, 10, 32)
 			userID = uint(parsed)
 		}
+
+		roleVal, _ := claims["role"].(string)
 
 		var iat int64
 		if val, exists := claims["iat"]; exists {
@@ -88,86 +93,86 @@ func (ctrl *UserHandler) AuthMiddleware() gin.HandlerFunc {
 
 		valid, err := ctrl.svc.IsTokenValid(userID, tokenString, iat)
 		if err != nil || !valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token has been blacklisted or invalidated"})
+			helper.WriteErrorResponse(c, http.StatusUnauthorized, "Token has been blacklisted or invalidated")
 			c.Abort()
 			return
 		}
 
 		c.Set("userID", userID)
+		c.Set("role", roleVal)
 		c.Set("token", tokenString)
 		c.Set("exp", exp)
 		c.Next()
 	}
 }
 
-type RegisterRequest struct {
-	Name     string `json:"name" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
-}
-
 func (ctrl *UserHandler) Register(c *gin.Context) {
-	var req RegisterRequest
+	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		helper.WriteValidationErrorResponse(c, err)
 		return
 	}
 
-	user, err := ctrl.svc.Register(req.Name, req.Email, req.Password)
+	user, err := ctrl.svc.Register(req.Name, req.Email, req.Password, req.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		helper.WriteErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Registration successful. Please check your email for the OTP code.",
-		"user":    user,
-	})
-}
+	userResp := dto.UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Role:      user.Role,
+		IsActive:  user.IsActive,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+	}
 
-type VerifyRequest struct {
-	Email string `json:"email" binding:"required,email"`
-	Code  string `json:"code" binding:"required,len=6"`
+	helper.WriteSuccessResponse(c, http.StatusCreated, "Registration successful. Please check your email for the OTP code.", userResp)
 }
 
 func (ctrl *UserHandler) VerifyOTP(c *gin.Context) {
-	var req VerifyRequest
+	var req dto.VerifyOTPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		helper.WriteValidationErrorResponse(c, err)
 		return
 	}
 
 	err := ctrl.svc.VerifyOTP(req.Email, req.Code)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		helper.WriteErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Account successfully verified and activated."})
-}
-
-type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	helper.WriteSuccessResponse(c, http.StatusOK, "Account successfully verified and activated.", nil)
 }
 
 func (ctrl *UserHandler) Login(c *gin.Context) {
-	var req LoginRequest
+	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		helper.WriteValidationErrorResponse(c, err)
 		return
 	}
 
-	token, err := ctrl.svc.Login(req.Email, req.Password)
+	token, user, err := ctrl.svc.Login(req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		helper.WriteErrorResponse(c, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Login successful",
-		"token":   token,
-	})
+	loginResp := dto.LoginResponse{
+		Token: token,
+		User: dto.UserResponse{
+			ID:        user.ID,
+			Name:      user.Name,
+			Email:     user.Email,
+			Role:      user.Role,
+			IsActive:  user.IsActive,
+			CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		},
+	}
+
+	helper.WriteSuccessResponse(c, http.StatusOK, "Login successful", loginResp)
 }
 
 func (ctrl *UserHandler) Logout(c *gin.Context) {
@@ -179,28 +184,151 @@ func (ctrl *UserHandler) Logout(c *gin.Context) {
 
 	err := ctrl.svc.Logout(tokenStr, exp)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		helper.WriteErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged out from current session."})
+	helper.WriteSuccessResponse(c, http.StatusOK, "Successfully logged out from current session.", nil)
 }
 
 func (ctrl *UserHandler) ForceLogout(c *gin.Context) {
 	userIDVal, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		helper.WriteErrorResponse(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 	userID := userIDVal.(uint)
 
 	err := ctrl.svc.ForceLogout(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		helper.WriteErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged out from all devices."})
+	helper.WriteSuccessResponse(c, http.StatusOK, "Successfully logged out from all devices.", nil)
+}
+
+func (ctrl *UserHandler) GetProfile(c *gin.Context) {
+	idStr := c.Param("id")
+	targetID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		helper.WriteErrorResponse(c, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	userIDVal, _ := c.Get("userID")
+	roleVal, _ := c.Get("role")
+	authenticatedUserID := userIDVal.(uint)
+	role := roleVal.(string)
+
+	// IDOR Protection: Standard user can only query their own profile ID
+	// Bypassed if request has admin or staff roles
+	if role != "admin" && role != "staff" && authenticatedUserID != uint(targetID) {
+		helper.WriteErrorResponse(c, http.StatusForbidden, "Forbidden: You are not authorized to view this profile")
+		return
+	}
+
+	user, err := ctrl.svc.GetUserByID(uint(targetID))
+	if err != nil {
+		helper.WriteErrorResponse(c, http.StatusNotFound, "User not found")
+		return
+	}
+
+	userResp := dto.UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Role:      user.Role,
+		IsActive:  user.IsActive,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+	}
+
+	helper.WriteSuccessResponse(c, http.StatusOK, "User profile retrieved successfully", userResp)
+}
+
+func (ctrl *UserHandler) UpdateProfile(c *gin.Context) {
+	idStr := c.Param("id")
+	targetID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		helper.WriteErrorResponse(c, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	userIDVal, _ := c.Get("userID")
+	roleVal, _ := c.Get("role")
+	authenticatedUserID := userIDVal.(uint)
+	role := roleVal.(string)
+
+	// IDOR Protection: Standard user can only update their own profile ID
+	// Bypassed if request has admin or staff roles
+	if role != "admin" && role != "staff" && authenticatedUserID != uint(targetID) {
+		helper.WriteErrorResponse(c, http.StatusForbidden, "Forbidden: You are not authorized to update this profile")
+		return
+	}
+
+	var req dto.UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		helper.WriteValidationErrorResponse(c, err)
+		return
+	}
+
+	user, err := ctrl.svc.GetUserByID(uint(targetID))
+	if err != nil {
+		helper.WriteErrorResponse(c, http.StatusNotFound, "User not found")
+		return
+	}
+
+	if req.Name != "" {
+		user.Name = req.Name
+	}
+
+	if req.Password != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			helper.WriteErrorResponse(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		user.Password = string(hashedPassword)
+	}
+
+	err = ctrl.svc.UpdateUser(user)
+	if err != nil {
+		helper.WriteErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	userResp := dto.UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Role:      user.Role,
+		IsActive:  user.IsActive,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+	}
+
+	helper.WriteSuccessResponse(c, http.StatusOK, "Profile updated successfully", userResp)
+}
+
+func (ctrl *UserHandler) ListUsers(c *gin.Context) {
+	users, err := ctrl.svc.ListUsers()
+	if err != nil {
+		helper.WriteErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var userResps []dto.UserResponse
+	for _, user := range users {
+		userResps = append(userResps, dto.UserResponse{
+			ID:        user.ID,
+			Name:      user.Name,
+			Email:     user.Email,
+			Role:      user.Role,
+			IsActive:  user.IsActive,
+			CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	helper.WriteSuccessResponse(c, http.StatusOK, "Users retrieved successfully", userResps)
 }
 
 func (ctrl *UserHandler) Health(c *gin.Context) {
@@ -224,11 +352,13 @@ func (ctrl *UserHandler) Health(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	healthData := gin.H{
 		"status":    "UP",
 		"service":   "user-service",
 		"timestamp": time.Now().Format(time.RFC3339),
 		"database":  dbStatus,
 		"redis":     redisStatus,
-	})
+	}
+
+	helper.WriteSuccessResponse(c, http.StatusOK, "Health status", healthData)
 }

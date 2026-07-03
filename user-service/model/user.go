@@ -12,6 +12,7 @@ type User struct {
 	Email    string `json:"email" gorm:"type:varchar(100);uniqueIndex;not null"`
 	Password string `json:"-" gorm:"type:varchar(255);not null"`
 	IsActive bool   `json:"is_active" gorm:"default:false"`
+	Role     string `json:"role" gorm:"type:varchar(20);default:'user';not null"`
 }
 
 type OTP struct {

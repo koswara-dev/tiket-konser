@@ -16,10 +16,11 @@ type OrderItem struct {
 }
 
 type BookingRepository interface {
-	GetConcerts() ([]model.Concert, error)
+	GetConcerts(search string, page int, limit int) ([]model.Concert, int64, error)
 	CreateConcert(concert *model.Concert) error
 	CreateBookingWithStockCheck(userID uint, items []OrderItem) (*model.Booking, error)
 	ConfirmPayment(bookingID uint) (*model.Booking, error)
+	GetBookingByID(bookingID uint) (*model.Booking, error)
 }
 
 type bookingRepository struct {
@@ -30,13 +31,31 @@ func NewBookingRepository(db *gorm.DB) BookingRepository {
 	return &bookingRepository{db: db}
 }
 
-func (r *bookingRepository) GetConcerts() ([]model.Concert, error) {
+func (r *bookingRepository) GetConcerts(search string, page int, limit int) ([]model.Concert, int64, error) {
 	if r.db == nil {
-		return nil, errors.New("database connection is unavailable")
+		return nil, 0, errors.New("database connection is unavailable")
 	}
+
+	var totalRows int64
 	var concerts []model.Concert
-	err := r.db.Preload("TicketCategories").Find(&concerts).Error
-	return concerts, err
+
+	query := r.db.Model(&model.Concert{})
+	if search != "" {
+		searchQuery := "%" + search + "%"
+		query = query.Where("title ILIKE ? OR artist ILIKE ?", searchQuery, searchQuery)
+	}
+
+	if err := query.Count(&totalRows).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * limit
+	err := query.Preload("TicketCategories").Limit(limit).Offset(offset).Find(&concerts).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return concerts, totalRows, nil
 }
 
 func (r *bookingRepository) CreateConcert(concert *model.Concert) error {
@@ -128,5 +147,17 @@ func (r *bookingRepository) ConfirmPayment(bookingID uint) (*model.Booking, erro
 		return nil, err
 	}
 
+	return &booking, nil
+}
+
+func (r *bookingRepository) GetBookingByID(bookingID uint) (*model.Booking, error) {
+	if r.db == nil {
+		return nil, errors.New("database connection is unavailable")
+	}
+	var booking model.Booking
+	err := r.db.Preload("BookingItems.TicketCategory").First(&booking, bookingID).Error
+	if err != nil {
+		return nil, err
+	}
 	return &booking, nil
 }

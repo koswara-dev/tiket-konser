@@ -18,8 +18,8 @@ func NewBookingService(bookingRepo repository.BookingRepository) *BookingService
 	return &BookingService{bookingRepo: bookingRepo}
 }
 
-func (s *BookingService) GetConcerts() ([]model.Concert, error) {
-	return s.bookingRepo.GetConcerts()
+func (s *BookingService) GetConcerts(search string, page int, limit int) ([]model.Concert, int64, error) {
+	return s.bookingRepo.GetConcerts(search, page, limit)
 }
 
 func (s *BookingService) CreateConcert(title, artist, description, location string, date time.Time, categories []model.TicketCategory) (*model.Concert, error) {
@@ -67,4 +67,8 @@ func (s *BookingService) CreateBooking(userID uint, items []OrderItemInput) (*mo
 
 func (s *BookingService) ConfirmPayment(bookingID uint) (*model.Booking, error) {
 	return s.bookingRepo.ConfirmPayment(bookingID)
+}
+
+func (s *BookingService) GetBookingByID(bookingID uint) (*model.Booking, error) {
+	return s.bookingRepo.GetBookingByID(bookingID)
 }

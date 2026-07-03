@@ -2,12 +2,14 @@ package routes
 
 import (
 	"user-service/handler"
+	"user-service/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
 func SetupRouter(userHandler *handler.UserHandler) *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.ErrorHandler())
 
 	r.GET("/health", userHandler.Health)
 
@@ -20,11 +22,14 @@ func SetupRouter(userHandler *handler.UserHandler) *gin.Engine {
 			auth.POST("/login", userHandler.Login)
 		}
 
-		securedAuth := v1.Group("/auth")
-		securedAuth.Use(userHandler.AuthMiddleware())
+		secured := v1.Group("/")
+		secured.Use(userHandler.AuthMiddleware())
 		{
-			securedAuth.POST("/logout", userHandler.Logout)
-			securedAuth.POST("/force-logout", userHandler.ForceLogout)
+			secured.POST("/auth/logout", userHandler.Logout)
+			secured.POST("/auth/force-logout", userHandler.ForceLogout)
+			secured.GET("/users/:id", userHandler.GetProfile)
+			secured.PUT("/users/:id", userHandler.UpdateProfile)
+			secured.GET("/users", middleware.RequireRoles("admin", "staff"), userHandler.ListUsers)
 		}
 	}
 

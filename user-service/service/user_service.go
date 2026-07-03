@@ -55,7 +55,7 @@ func (s *UserService) SendOTPEmail(email, otp string) error {
 	return nil
 }
 
-func (s *UserService) Register(name, email, password string) (*model.User, error) {
+func (s *UserService) Register(name, email, password, role string) (*model.User, error) {
 	_, err := s.userRepo.FindByEmail(email)
 	if err == nil {
 		return nil, errors.New("email is already registered")
@@ -66,10 +66,15 @@ func (s *UserService) Register(name, email, password string) (*model.User, error
 		return nil, err
 	}
 
+	if role == "" {
+		role = "user"
+	}
+
 	user := model.User{
 		Name:     name,
 		Email:    email,
 		Password: string(hashedPassword),
+		Role:     role,
 		IsActive: false,
 	}
 
@@ -95,33 +100,34 @@ func (s *UserService) VerifyOTP(email, code string) error {
 	return s.userRepo.VerifyOTPAndActivateUser(email, code)
 }
 
-func (s *UserService) Login(email, password string) (string, error) {
+func (s *UserService) Login(email, password string) (string, *model.User, error) {
 	user, err := s.userRepo.FindByEmail(email)
 	if err != nil {
-		return "", errors.New("invalid email or password")
+		return "", nil, errors.New("invalid email or password")
 	}
 
 	if !user.IsActive {
-		return "", errors.New("account is not verified yet. please verify with OTP")
+		return "", nil, errors.New("account is not verified yet. please verify with OTP")
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return "", errors.New("invalid email or password")
+		return "", nil, errors.New("invalid email or password")
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": user.ID,
-		"exp": time.Now().Add(24 * time.Hour).Unix(),
-		"iat": time.Now().Unix(),
+		"sub":  user.ID,
+		"role": user.Role,
+		"exp":  time.Now().Add(24 * time.Hour).Unix(),
+		"iat":  time.Now().Unix(),
 	})
 
 	tokenString, err := token.SignedString([]byte(s.cfg.JwtSecret))
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	return tokenString, nil
+	return tokenString, user, nil
 }
 
 func (s *UserService) Logout(tokenString string, exp int64) error {
@@ -152,4 +158,16 @@ func (s *UserService) IsTokenValid(userID uint, tokenString string, iat int64) (
 	}
 
 	return true, nil
+}
+
+func (s *UserService) GetUserByID(id uint) (*model.User, error) {
+	return s.userRepo.FindByID(id)
+}
+
+func (s *UserService) ListUsers() ([]model.User, error) {
+	return s.userRepo.FindAll()
+}
+
+func (s *UserService) UpdateUser(user *model.User) error {
+	return s.userRepo.UpdateUser(user)
 }
